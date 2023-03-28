@@ -1,18 +1,20 @@
 # Hands-on Challenge
 Dein Kunde möchte eine REST API zum Anzeigen und Downloaden von manuell bereitgestellten Files anbieten können. Die User Story hat folgende Akzeptanzkriterien definiert:
 
-- Die Route GET `/files` listet alle verfügbaren Dateien auf
-- Die Route GET `/files/{filename}` liefert Detaileigenschaften sowie einen Download-Link der Datei
-- Der Download-Link ist nur für 5 Minuten gültig
+- Die Route GET `/files` listet alle verfügbaren Dateien inklusive einem Download-Link der Datei
+- Der Download-Link ist jeweils nur für 5 Minuten gültig
 - Mindestens die Detailabfragen (2te Route) können einfach statistisch ausgewertet werden, d.h. wieviele Anfragen in welchem Zeitraum getätigt werden
 - Die Implementation erfolgt nach den Zero Trust Prinzipen, verzichtet aber im ersten Ausarbeitungsschritt auf Netzwerksicherheit und User-Authentifikation
 
 Stretch Goals (optional):
+- Auftrennung der Logik in ein echtes REST API Pattern wie folgt:
+  - Die Route GET `/files` listet alle verfügbaren Dateien auf (nur Namen)
+  - Die Route GET `/files/{filename}` liefert Detaileigenschaften sowie einen Download-Link der Datei
 - Wenn mehr als 5 Detailabfragen pro Stunde erfolgen, erfolgt eine Benachrichtigung per Email (für Entwicklung kann diese frei gewählt werden)
 
 Du bist beauftragt, möglichst schnell und einfach einen Proof of Concept zu realisieren. In einem früheren Backlog Refinement wurde von einem Architekten folgende Skizze erstellt:
 
-![](doc/architecture.png)
+![Architektur-Grafik](doc/architecture.png)
 
 Learn-Tasks (optional):
 - Wie lange dauern die jeweiligen Requests? Welche Varianz (min/max) gibt es? Wie setzen sich die Durchlaufzeiten zusammen?
@@ -67,14 +69,17 @@ Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz vers
    - Getting Started: https://learn.microsoft.com/en-us/azure/azure-functions/functions-reference
    - Hinweis: Der App Service Editor bietet erweiterte Funktionalitäten, falls du dich für eine Programmierung direkt im Portal entscheidest
 
+## Zusätzliche Schritte für Strech Goals
+
 1. Function für File Details inkl. Download Link erstellen
 
 1. Monitoring Metriken hinzufügen
 
+   - Hinweis: Das ist optional, es könnte auch mit den Standardmetriken gearbeitet werden
+
 1. Metriken in Application Insights analysieren und Alert Rule erstellen
 
-
-Notes:
+## Zusatzinfos
 
 a) Ja, man kann auch direkt mit der Function starten und die Resourcen implizit generieren lassen
 
@@ -94,23 +99,22 @@ Stimmt, es geht um die Azure Cloud, nicht ums Programmieren. Wir habens uns einf
 
 Hier die Überholspur dazu:
 
-**Bei beiden Functions im App Service Editor ein neues File `function.proj` erstellen**
+**Bei allen Functions im App Service Editor ein neues File `function.proj` erstellen**
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <TargetFramework>netstandard2.0</TargetFramework>
-      </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
 
-      <ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.15.1"/>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
   </ItemGroup>
 </Project>
 ```
 
-**ListFiles**
+**ListFiles (komplett): `run.csx`**
 ```csharp
-#r "Newtonsoft.Json"
-
 using System.Net;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
@@ -185,9 +189,137 @@ public class FileInfo
 }
 ```
 
-**GetFile**
+**ListFiles (Strech Goal): `run.csx`**
 ```csharp
+using System.Net;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
+public static async Task<IActionResult> Run(HttpRequest req, ILogger log)
+{
+    log.LogInformation($"Get files triggered");
+
+    string storageConnectionString = System.Environment.GetEnvironmentVariable("StorageConnectionString", EnvironmentVariableTarget.Process);
+    string storageBlobContainer = System.Environment.GetEnvironmentVariable("StorageBlobContainer", EnvironmentVariableTarget.Process);
+
+    var blobContainer = new BlobContainerClient(storageConnectionString, storageBlobContainer);
+
+    if (!await blobContainer.ExistsAsync())
+    {
+        return new NoContentResult();
+    }
+
+    var results = new List<string>();
+
+    // List all blobs in the container
+    await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync())
+    {
+        results.Add(blobItem.Name);
+    }
+
+    log.LogInformation($"Found {results.Count} files");
+    log.LogMetric("Listing", 1, new Dictionary<string, object> { { "Count", results.Count } });
+
+    var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };
+
+    return new OkObjectResult(JsonConvert.SerializeObject(results, serializerSettings));
+}
+```
+
+**GetFile (Strech Goal): `run.csx`**
+```csharp
+using System.Net;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
+
+public static async Task<IActionResult> Run(HttpRequest req, string filename, ILogger log)
+{
+    log.LogInformation($"Get file '{filename}' triggered");
+
+    string storageConnectionString = System.Environment.GetEnvironmentVariable("StorageConnectionString", EnvironmentVariableTarget.Process);
+    string storageBlobContainer = System.Environment.GetEnvironmentVariable("StorageBlobContainer", EnvironmentVariableTarget.Process);
+
+    var blob = new BlobClient(storageConnectionString, storageBlobContainer, filename);
+
+    if (!await blob.ExistsAsync())
+    {
+        return new NotFoundResult();
+    }
+
+    // Download blob properties (note: a blob may also have custom metadata...)
+    var properties = await GetBlobProperties(storageConnectionString, storageBlobContainer, filename);
+
+    if (properties == null)
+    {
+        return new BadRequestObjectResult($"File '{filename}' exists, but has corrupted metadata");
+    }
+
+    // Generate SAS URL for protected download
+    if (!blob.CanGenerateSasUri)
+    {
+        return new UnauthorizedResult();
+    }
+
+    var sasBuilder = new BlobSasBuilder()
+    {
+        BlobContainerName = storageBlobContainer,
+        BlobName = blob.Name,
+        Resource = "b",
+        ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5)
+    };
+    sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+    Uri sasUri = blob.GenerateSasUri(sasBuilder);
+
+    // Build result object
+    var result = new FileInfo
+    {
+        Name = blob.Name,
+        ContentType = properties.ContentType,
+        SizeInBytes = properties.ContentLength?.ToString(),
+        LastModified = properties.LastModified?.ToString("s"),
+        Uri = sasUri.AbsoluteUri
+    };
+
+    log.LogMetric("Download", 1, new Dictionary<string, object> { { "File", filename } });
+
+    var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };
+
+    return new OkObjectResult(JsonConvert.SerializeObject(result, serializerSettings));
+}
+
+public static async Task<BlobItemProperties> GetBlobProperties(string storageConnectionString, string storageBlobContainer, string filename)
+{
+    // Note: The BlobClient does have a method to get properties directly (https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blobbaseclient.getpropertiesasync)
+    //       Unfortunately this has a bug and does not provide a valid object, therefore this workaround
+    var blobContainer = new BlobContainerClient(storageConnectionString, storageBlobContainer);
+    await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync(prefix: filename))
+    {
+        return blobItem.Properties;
+    }
+
+    return null;
+}
+
+public class FileInfo
+{
+    public string Name { get; set; }
+    public string ContentType { get; set; }
+    public string SizeInBytes { get; set; }
+    public string LastModified { get; set; }
+    public string Uri { get; set; }
+}
 ```
 
 Die Route (URL) sowie die unterstützten HTTP Methode(n) kann wie folgt konfiguriert werden:

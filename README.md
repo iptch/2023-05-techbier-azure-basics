@@ -3,7 +3,7 @@ Dein Kunde möchte eine REST API zum Anzeigen und Downloaden von manuell bereitg
 
 - Die Route GET `/files` listet alle verfügbaren Dateien inklusive einem Download-Link der Datei
 - Der Download-Link ist jeweils nur für 5 Minuten gültig
-- Mindestens die Detailabfragen (2te Route) können einfach statistisch ausgewertet werden, d.h. wieviele Anfragen in welchem Zeitraum getätigt werden
+- Die API Requests können einfach statistisch ausgewertet werden, d.h. wieviele Anfragen in welchem Zeitraum getätigt werden
 - Die Implementation erfolgt nach den Zero Trust Prinzipen, verzichtet aber im ersten Ausarbeitungsschritt auf Netzwerksicherheit und User-Authentifikation
 
 Stretch Goals (optional):
@@ -14,14 +14,7 @@ Stretch Goals (optional):
 
 Du bist beauftragt, möglichst schnell und einfach einen Proof of Concept zu realisieren. In einem früheren Backlog Refinement wurde von einem Architekten folgende Skizze erstellt:
 
-![Architektur-Grafik](doc/architecture.png)
-
-Learn-Tasks (optional):
-- Wie lange dauern die jeweiligen Requests? Welche Varianz (min/max) gibt es? Wie setzen sich die Durchlaufzeiten zusammen?
-- Für welchen Zeitraum können die Analysen (d.h. obenstehend geforderte Statistik) durchgeführt werden? Ist dieser anpassbar, falls ja wie und mit welchen Konsequenzen?
-- Wieviel kostet die Implementation pro Monat? Von was ist es abhängig? Wie kann man das kontrollieren (und überwachen)?
-- Wie gut skaliert die Implementation? Funktioniert die Anwendung mit 1k Requests pro Stunde? Mit 10k, 100k, ....?
-- Wie gut ist die Sicherheit der Lösung? Wie greifen die Services aufeinander zu? Gibt es Incidents wie z.B. Secrets welche im Klartext konfiguriert sind? Gibt es Empfehlungen und, falls ja, wo?
+![Architektur-Grafik](doc/Architektur.drawio.png)
 
 # Guide
 Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz verschieden gelöst werden. Nachfolgend ist ein möglicher Lösungsweg grob skizziert:
@@ -335,3 +328,11 @@ Ihr seht die Subscription nicht? Nebst Berechtigungsproblemen könnte der Grund 
 ## Sprache
 Wenn ihr das Portal zum ersten Mal öffnet, erscheint vielleicht alles in Deutsch. Das empfehlen wir nicht, weil auch die Schlüsselbegriffe (Subscription -> Abonnement usw.) übersetzt werden. So findet ihr auf z.B. StackOverflow kaum etwas und müsst bei Info-Sessions immer alles für euch adaptieren. Trotz Englisch als Anzeigesprache kann man Formatierungen (Währung, Datum/Zeit usw.) schweizerisch darstellen lassen:
 ![](doc/portal-language-config.png)
+
+# Learnings
+
+- Wie lange dauern die jeweiligen Requests? Welche Varianz (min/max) gibt es? Wie setzen sich die Durchlaufzeiten zusammen?
+- Für welchen Zeitraum können die Analysen (d.h. obenstehend geforderte Statistik) durchgeführt werden? Ist dieser anpassbar, falls ja wie und mit welchen Konsequenzen?
+- Wieviel kostet die Implementation pro Monat? Von was ist es abhängig? Wie kann man das kontrollieren (und überwachen)?
+- Wie gut skaliert die Implementation? Funktioniert die Anwendung mit 1k Requests pro Stunde? Mit 10k, 100k, ....?
+- Wie gut ist die Sicherheit der Lösung? Wie greifen die Services aufeinander zu? Gibt es Incidents wie z.B. Secrets welche im Klartext konfiguriert sind? Gibt es Empfehlungen und, falls ja, wo?

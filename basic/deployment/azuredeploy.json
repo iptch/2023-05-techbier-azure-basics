@@ -1,0 +1,230 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.15.31.15270",
+      "templateHash": "4258336919609416059"
+    }
+  },
+  "parameters": {
+    "resourceNameBody": {
+      "type": "string",
+      "defaultValue": "tb-azbasics"
+    },
+    "resourceNameSuffix": {
+      "type": "string",
+      "metadata": {
+        "description": "Something unique like your initials or short name (e.g. \"jsc\")"
+      }
+    },
+    "resourceLocation": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "$fxv#0": "<Project Sdk=\"Microsoft.NET.Sdk\">\r\n  <PropertyGroup>\r\n    <TargetFramework>netstandard2.0</TargetFramework>\r\n  </PropertyGroup>\r\n\r\n  <ItemGroup>\r\n    <PackageReference Include=\"Azure.Storage.Blobs\" Version=\"12.15.1\"/>\r\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\"/>\r\n  </ItemGroup>\r\n</Project>",
+    "$fxv#1": "using System.Net;\r\nusing System.Collections.Generic;\r\nusing Microsoft.AspNetCore.Mvc;\r\nusing Microsoft.Extensions.Primitives;\r\nusing Newtonsoft.Json;\r\nusing Newtonsoft.Json.Serialization;\r\nusing Azure.Storage.Blobs;\r\nusing Azure.Storage.Blobs.Models;\r\nusing Azure.Storage.Sas;\r\n\r\n// Read configuration values (App Settings)\r\nstatic string StorageConnectionString => System.Environment.GetEnvironmentVariable(nameof(StorageConnectionString), EnvironmentVariableTarget.Process);\r\nstatic string StorageBlobContainer => System.Environment.GetEnvironmentVariable(nameof(StorageBlobContainer), EnvironmentVariableTarget.Process);\r\n\r\npublic static async Task<IActionResult> Run(HttpRequest req, ILogger log)\r\n{\r\n    log.LogInformation($\"Get files triggered\");\r\n\r\n    // Establish connection to Blob Storage container (containing all our files as blobs)\r\n    var blobContainer = new BlobContainerClient(StorageConnectionString, StorageBlobContainer);\r\n\r\n    if (!await blobContainer.ExistsAsync())\r\n    {\r\n        return new NoContentResult();\r\n    }\r\n\r\n    if (!blobContainer.CanGenerateSasUri)\r\n    {\r\n        return new UnauthorizedResult();\r\n    }\r\n\r\n    var results = new List<FileInfo>();\r\n\r\n    // List all blobs in the container\r\n    await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync())\r\n    {\r\n        // Establish connection to specific blob object\r\n        var blobClient = blobContainer.GetBlobClient(blobItem.Name);\r\n        \r\n        // SAS = Shared Access Signature, more: https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview\r\n        var sasBuilder = new BlobSasBuilder()\r\n        {\r\n            BlobContainerName = StorageBlobContainer,\r\n            BlobName = blobClient.Name, // Token is valid for this particular blob only\r\n            Resource = \"b\",\r\n            ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5) // Token will be valid for 5 minutes only\r\n        };\r\n        sasBuilder.SetPermissions(BlobSasPermissions.Read);\r\n\r\n        Uri sasUri = blobClient.GenerateSasUri(sasBuilder);\r\n\r\n        results.Add(new FileInfo\r\n        {\r\n            Name = blobItem.Name,\r\n            ContentType = blobItem.Properties.ContentType,\r\n            SizeInBytes = blobItem.Properties.ContentLength?.ToString(),\r\n            LastModified = blobItem.Properties.LastModified?.ToString(\"s\"),\r\n            Uri = sasUri.AbsoluteUri\r\n        });\r\n    }\r\n\r\n    log.LogInformation($\"Found {results.Count} files\");\r\n\r\n    var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };\r\n\r\n    return new OkObjectResult(JsonConvert.SerializeObject(results, serializerSettings));\r\n}\r\n\r\npublic class FileInfo\r\n{\r\n    public string Name { get; set; }\r\n    public string ContentType { get; set; }\r\n    public string SizeInBytes { get; set; }\r\n    public string LastModified { get; set; }\r\n    public string Uri { get; set; }\r\n}",
+    "storageAccountName": "[replace(format('st-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')), '-', '')]",
+    "storageBlobContainerName": "files",
+    "funcAppName": "[format('func-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('resourceLocation')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "dnsEndpointType": "Standard",
+        "defaultToOAuthAuthentication": false,
+        "publicNetworkAccess": "Enabled",
+        "allowCrossTenantReplication": true,
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": true,
+        "allowSharedKeyAccess": true,
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Allow"
+        },
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "requireInfrastructureEncryption": false,
+          "services": {
+            "file": {
+              "keyType": "Account",
+              "enabled": true
+            },
+            "blob": {
+              "keyType": "Account",
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Hot"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+      "properties": {
+        "changeFeed": {
+          "enabled": false
+        },
+        "restorePolicy": {
+          "enabled": false
+        },
+        "containerDeleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        },
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "allowPermanentDelete": false,
+          "enabled": true,
+          "days": 7
+        },
+        "isVersioningEnabled": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('storageBlobContainerName'))]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-03-01",
+      "name": "[format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
+      "location": "[parameters('resourceLocation')]",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic"
+      },
+      "kind": "functionapp",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-03-01",
+      "name": "[variables('funcAppName')]",
+      "location": "[parameters('resourceLocation')]",
+      "kind": "functionapp",
+      "properties": {
+        "enabled": true,
+        "hostNameSslStates": [
+          {
+            "name": "[format('{0}.azurewebsites.net', variables('funcAppName'))]",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "[format('{0}.scm.azurewebsites.net', variables('funcAppName'))]",
+            "sslState": "Disabled",
+            "hostType": "Repository"
+          }
+        ],
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
+        "siteConfig": {
+          "functionAppScaleLimit": 200,
+          "minimumElasticInstanceCount": 0,
+          "ftpsState": "Disabled"
+        },
+        "containerSize": 1536,
+        "dailyMemoryTimeQuota": 0,
+        "httpsOnly": true,
+        "redundancyMode": "None",
+        "publicNetworkAccess": "Enabled",
+        "keyVaultReferenceIdentity": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2022-03-01",
+      "name": "[format('{0}/{1}', variables('funcAppName'), 'appsettings')]",
+      "properties": {
+        "AzureWebJobsStorage": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]",
+        "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]",
+        "FUNCTIONS_EXTENSION_VERSION": "~4",
+        "FUNCTIONS_WORKER_RUNTIME": "dotnet",
+        "WEBSITE_TIME_ZONE": "W. Europe Standard Time",
+        "WEBSITE_CONTENTSHARE": "[variables('funcAppName')]",
+        "StorageConnectionString": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]",
+        "StorageBlobContainer": "[variables('storageBlobContainerName')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('funcAppName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/functions",
+      "apiVersion": "2022-03-01",
+      "name": "[format('{0}/{1}', variables('funcAppName'), 'ListFiles')]",
+      "properties": {
+        "config": {
+          "bindings": [
+            {
+              "name": "req",
+              "route": "files",
+              "type": "httpTrigger",
+              "direction": "in",
+              "authLevel": "anonymous",
+              "methods": [
+                "get"
+              ]
+            },
+            {
+              "name": "$return",
+              "type": "http",
+              "direction": "out"
+            }
+          ]
+        },
+        "files": {
+          "function.proj": "[variables('$fxv#0')]",
+          "run.csx": "[variables('$fxv#1')]"
+        },
+        "test_data": "{\"method\":\"get\",\"queryStringParams\":[],\"headers\":[],\"body\":\"\"}",
+        "invoke_url_template": "[format('https://{0}.azurewebsites.net/api/files', variables('funcAppName'))]",
+        "language": "CSharp",
+        "isDisabled": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('funcAppName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "userApiEndpoint": {
+      "type": "string",
+      "value": "[format('https://{0}.azurewebsites.net/api/files', variables('funcAppName'))]"
+    },
+    "operatorStorageBrowserEndpoint": {
+      "type": "string",
+      "value": "[format('{0}/#@{1}/resource{2}/storagebrowser', environment().portal, subscription().tenantId, resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')))]"
+    }
+  }
+}

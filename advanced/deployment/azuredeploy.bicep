@@ -277,8 +277,8 @@ resource funcListFilesRes 'Microsoft.Web/sites/functions@2022-03-01' = {
       ]
     }
     files: {
-      'function.proj': loadTextContent('../source/function.proj')
-      'run.csx': loadTextContent('../source/listing-advanced.run.csx')
+      'function.proj': loadTextContent('../source/list-files/function.proj')
+      'run.csx': loadTextContent('../source/list-files/run.csx')
     }
     test_data: '{"method":"get","queryStringParams":[],"headers":[],"body":""}'
     invoke_url_template: 'https://${funcAppName}.azurewebsites.net/api/files'
@@ -311,8 +311,8 @@ resource funcGetFileRes 'Microsoft.Web/sites/functions@2022-03-01' = {
       ]
     }
     files: {
-      'function.proj': loadTextContent('../source/function.proj')
-      'run.csx': loadTextContent('../source/detail.run.csx')
+      'function.proj': loadTextContent('../source/get-file/function.proj')
+      'run.csx': loadTextContent('../source/get-file/run.csx')
     }
     test_data: '{"method":"get","queryStringParams":[{"name":"filename","value":"test.png"}],"headers":[],"body":""}'
     invoke_url_template: 'https://${funcAppName}.azurewebsites.net/api/files/{filename}'

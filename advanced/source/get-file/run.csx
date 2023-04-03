@@ -8,14 +8,22 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 
+// Read configuration values (App Settings)
+static string StorageConnectionString => System.Environment.GetEnvironmentVariable(nameof(StorageConnectionString), EnvironmentVariableTarget.Process);
+static string StorageBlobContainer => System.Environment.GetEnvironmentVariable(nameof(StorageBlobContainer), EnvironmentVariableTarget.Process);
+static string DownloadMetricName => System.Environment.GetEnvironmentVariable(nameof(DownloadMetricName), EnvironmentVariableTarget.Process);
+
 public static async Task<IActionResult> Run(HttpRequest req, string filename, ILogger log)
 {
     log.LogInformation($"Get file '{filename}' triggered");
 
-    string storageConnectionString = System.Environment.GetEnvironmentVariable("StorageConnectionString", EnvironmentVariableTarget.Process);
-    string storageBlobContainer = System.Environment.GetEnvironmentVariable("StorageBlobContainer", EnvironmentVariableTarget.Process);
+    if (string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(filename)) || !Path.HasExtension(filename))
+    {
+        return new BadRequestObjectResult($"Invalid parameter '{filename}'");
+    }
 
-    var blob = new BlobClient(storageConnectionString, storageBlobContainer, filename);
+    // Establish connection to Blob Storage blob
+    var blob = new BlobClient(StorageConnectionString, StorageBlobContainer, filename);
 
     if (!await blob.ExistsAsync())
     {
@@ -23,7 +31,7 @@ public static async Task<IActionResult> Run(HttpRequest req, string filename, IL
     }
 
     // Download blob properties (note: a blob may also have custom metadata...)
-    var properties = await GetBlobProperties(storageConnectionString, storageBlobContainer, filename);
+    var properties = await GetBlobProperties(StorageConnectionString, StorageBlobContainer, filename);
 
     if (properties == null)
     {
@@ -36,12 +44,13 @@ public static async Task<IActionResult> Run(HttpRequest req, string filename, IL
         return new UnauthorizedResult();
     }
 
+    // SAS = Shared Access Signature, more: https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview
     var sasBuilder = new BlobSasBuilder()
     {
-        BlobContainerName = storageBlobContainer,
-        BlobName = blob.Name,
+        BlobContainerName = StorageBlobContainer,
+        BlobName = blob.Name, // Token is valid for this particular blob only
         Resource = "b",
-        ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5)
+        ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5) // Token will be valid for 5 minutes only
     };
     sasBuilder.SetPermissions(BlobSasPermissions.Read);
 
@@ -57,7 +66,8 @@ public static async Task<IActionResult> Run(HttpRequest req, string filename, IL
         Uri = sasUri.AbsoluteUri
     };
 
-    log.LogMetric("Download", 1, new Dictionary<string, object> { { "File", filename } });
+    // Metrics are specialized log entries which simplify monitoring. They're summarizable because of their numeric value and can also contain metadata
+    log.LogMetric(DownloadMetricName, 1, new Dictionary<string, object> { { "File", filename } });
 
     var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };
 
@@ -67,7 +77,7 @@ public static async Task<IActionResult> Run(HttpRequest req, string filename, IL
 public static async Task<BlobItemProperties> GetBlobProperties(string storageConnectionString, string storageBlobContainer, string filename)
 {
     // Note: The BlobClient does have a method to get properties directly (https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blobbaseclient.getpropertiesasync)
-    //       Unfortunately this has a bug and does not provide a valid object, therefore this workaround
+    //       Unfortunately this has a bug with current library version and does not provide a valid object, therefore this workaround
     var blobContainer = new BlobContainerClient(storageConnectionString, storageBlobContainer);
     await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync(prefix: filename))
     {

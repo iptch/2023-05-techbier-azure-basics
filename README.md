@@ -14,7 +14,7 @@ Stretch Goals (optional):
 
 Du bist beauftragt, möglichst schnell und einfach einen Proof of Concept zu realisieren. In einem früheren Backlog Refinement wurde von einem Architekten folgende Skizze erstellt:
 
-![Architektur-Grafik](doc/Architektur.drawio.png)
+![Architektur-Grafik](doc/Architektur-Basic.drawio.png)
 
 # Guide
 Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz verschieden gelöst werden. Nachfolgend ist ein möglicher Lösungsweg grob skizziert:
@@ -22,6 +22,7 @@ Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz vers
 1. Resource Group erstellen
 
    Tipp Naming: https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming
+   Tipp Region: Achte immer darauf was konfiguriert ist. Generell sollten alle Ressourcen wenn möglich in der gleichen Region erstellt werden. `Switzerland North` ist eine gute Wahl (fast alles Services verfügbar)
 
 1. Log Analytics Workspace erstellen
 
@@ -34,8 +35,8 @@ Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz vers
 1. Function App erstellen und Application Insights / Storage Account referenzieren
 
     - Consumption Plan
-    - Runtime Stack je nach gewünschter Code Language: https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages#language-support-details
-    - Hinweis: In-Portal Editing in obenstehend referenzierter Tabelle bedeutet, dass direkt im Portal ohne weitere Tools programmiert werden kann. Je nach Vorkenntnissen könnte dies der schnellste Weg sein...
+    - Runtime Stack je nach gewünschter Code Language: https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages#language-support-details (Hinweis: `In-Portal Editing` in referenzierter Tabelle bedeutet, dass direkt im Portal ohne weitere Tools programmiert werden kann)
+    - Für die Nutzung der bereitgestellten Code Snippets wähle: Publish = Code, Runtime Stack = .NET, Version = 6 (LTS), Operating System = (egal)
 
 1. Auf Function App die (System-assigned) Managed Identity aktivieren
 
@@ -59,7 +60,8 @@ Diese Challenge ist nicht als Copy-Paste Tutorial konzipiert. Sie kann ganz vers
 
 1. Function für Files Listing erstellen
 
-   - Getting Started: https://learn.microsoft.com/en-us/azure/azure-functions/functions-reference
+   - Für die Nutzung der bereitgestellten Code Snippets wähle: Development Environment = Develop in portal, Template = HTTP Trigger, Authorization level = Anonymous, New Function (entspricht Name) = ListFiles
+   - Hinweis: [Getting Started](https://learn.microsoft.com/en-us/azure/azure-functions/functions-reference)
    - Hinweis: Der App Service Editor bietet erweiterte Funktionalitäten, falls du dich für eine Programmierung direkt im Portal entscheidest
 
 ## Zusätzliche Schritte für Strech Goals

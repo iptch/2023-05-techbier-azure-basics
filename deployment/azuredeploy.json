@@ -5,14 +5,18 @@
     "_generator": {
       "name": "bicep",
       "version": "0.15.31.15270",
-      "templateHash": "18257897418566001659"
+      "templateHash": "11764860651110313788"
     }
   },
   "parameters": {
+    "resourceNameBody": {
+      "type": "string",
+      "defaultValue": "tb-azbasics"
+    },
     "resourceNameSuffix": {
       "type": "string",
       "metadata": {
-        "description": "Something like `tb-azbasics-jsc`"
+        "description": "Something unique like your initials or short name (e.g. \"jsc\")"
       }
     },
     "resourceLocation": {
@@ -36,17 +40,21 @@
     }
   },
   "variables": {
-    "storageAccountName": "[replace(format('st-{0}', parameters('resourceNameSuffix')), '-', '')]",
+    "$fxv#0": "<Project Sdk=\"Microsoft.NET.Sdk\">\r\n  <PropertyGroup>\r\n    <TargetFramework>netstandard2.0</TargetFramework>\r\n  </PropertyGroup>\r\n\r\n  <ItemGroup>\r\n    <PackageReference Include=\"Azure.Storage.Blobs\" Version=\"12.15.1\"/>\r\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\"/>\r\n  </ItemGroup>\r\n</Project>",
+    "$fxv#1": "using System.Net;\r\nusing System.Collections.Generic;\r\nusing Microsoft.AspNetCore.Mvc;\r\nusing Microsoft.Extensions.Primitives;\r\nusing Newtonsoft.Json;\r\nusing Newtonsoft.Json.Serialization;\r\nusing Azure.Storage.Blobs;\r\nusing Azure.Storage.Blobs.Models;\r\n\r\npublic static async Task<IActionResult> Run(HttpRequest req, ILogger log)\r\n{\r\n    log.LogInformation($\"Get files triggered\");\r\n\r\n    string storageConnectionString = System.Environment.GetEnvironmentVariable(\"StorageConnectionString\", EnvironmentVariableTarget.Process);\r\n    string storageBlobContainer = System.Environment.GetEnvironmentVariable(\"StorageBlobContainer\", EnvironmentVariableTarget.Process);\r\n\r\n    var blobContainer = new BlobContainerClient(storageConnectionString, storageBlobContainer);\r\n\r\n    if (!await blobContainer.ExistsAsync())\r\n    {\r\n        return new NoContentResult();\r\n    }\r\n\r\n    var results = new List<string>();\r\n\r\n    // List all blobs in the container\r\n    await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync())\r\n    {\r\n        results.Add(blobItem.Name);\r\n    }\r\n\r\n    log.LogInformation($\"Found {results.Count} files\");\r\n    log.LogMetric(\"Listing\", 1, new Dictionary<string, object> { { \"Count\", results.Count } });\r\n\r\n    var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };\r\n\r\n    return new OkObjectResult(JsonConvert.SerializeObject(results, serializerSettings));\r\n}",
+    "$fxv#2": "<Project Sdk=\"Microsoft.NET.Sdk\">\r\n  <PropertyGroup>\r\n    <TargetFramework>netstandard2.0</TargetFramework>\r\n  </PropertyGroup>\r\n\r\n  <ItemGroup>\r\n    <PackageReference Include=\"Azure.Storage.Blobs\" Version=\"12.15.1\"/>\r\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\"/>\r\n  </ItemGroup>\r\n</Project>",
+    "$fxv#3": "using System.Net;\r\nusing System.Collections.Generic;\r\nusing Microsoft.AspNetCore.Mvc;\r\nusing Microsoft.Extensions.Primitives;\r\nusing Newtonsoft.Json;\r\nusing Newtonsoft.Json.Serialization;\r\nusing Azure.Storage.Blobs;\r\nusing Azure.Storage.Blobs.Models;\r\nusing Azure.Storage.Sas;\r\n\r\npublic static async Task<IActionResult> Run(HttpRequest req, string filename, ILogger log)\r\n{\r\n    log.LogInformation($\"Get file '{filename}' triggered\");\r\n\r\n    string storageConnectionString = System.Environment.GetEnvironmentVariable(\"StorageConnectionString\", EnvironmentVariableTarget.Process);\r\n    string storageBlobContainer = System.Environment.GetEnvironmentVariable(\"StorageBlobContainer\", EnvironmentVariableTarget.Process);\r\n\r\n    var blob = new BlobClient(storageConnectionString, storageBlobContainer, filename);\r\n\r\n    if (!await blob.ExistsAsync())\r\n    {\r\n        return new NotFoundResult();\r\n    }\r\n\r\n    // Download blob properties (note: a blob may also have custom metadata...)\r\n    var properties = await GetBlobProperties(storageConnectionString, storageBlobContainer, filename);\r\n\r\n    if (properties == null)\r\n    {\r\n        return new BadRequestObjectResult($\"File '{filename}' exists, but has corrupted metadata\");\r\n    }\r\n\r\n    // Generate SAS URL for protected download\r\n    if (!blob.CanGenerateSasUri)\r\n    {\r\n        return new UnauthorizedResult();\r\n    }\r\n\r\n    var sasBuilder = new BlobSasBuilder()\r\n    {\r\n        BlobContainerName = storageBlobContainer,\r\n        BlobName = blob.Name,\r\n        Resource = \"b\",\r\n        ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(5)\r\n    };\r\n    sasBuilder.SetPermissions(BlobSasPermissions.Read);\r\n\r\n    Uri sasUri = blob.GenerateSasUri(sasBuilder);\r\n\r\n    // Build result object\r\n    var result = new FileInfo\r\n    {\r\n        Name = blob.Name,\r\n        ContentType = properties.ContentType,\r\n        SizeInBytes = properties.ContentLength?.ToString(),\r\n        LastModified = properties.LastModified?.ToString(\"s\"),\r\n        Uri = sasUri.AbsoluteUri\r\n    };\r\n\r\n    log.LogMetric(\"Download\", 1, new Dictionary<string, object> { { \"File\", filename } });\r\n\r\n    var serializerSettings = new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver(), NullValueHandling = NullValueHandling.Ignore };\r\n\r\n    return new OkObjectResult(JsonConvert.SerializeObject(result, serializerSettings));\r\n}\r\n\r\npublic static async Task<BlobItemProperties> GetBlobProperties(string storageConnectionString, string storageBlobContainer, string filename)\r\n{\r\n    // Note: The BlobClient does have a method to get properties directly (https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blobbaseclient.getpropertiesasync)\r\n    //       Unfortunately this has a bug and does not provide a valid object, therefore this workaround\r\n    var blobContainer = new BlobContainerClient(storageConnectionString, storageBlobContainer);\r\n    await foreach (BlobItem blobItem in blobContainer.GetBlobsAsync(prefix: filename))\r\n    {\r\n        return blobItem.Properties;\r\n    }\r\n\r\n    return null;\r\n}\r\n\r\npublic class FileInfo\r\n{\r\n    public string Name { get; set; }\r\n    public string ContentType { get; set; }\r\n    public string SizeInBytes { get; set; }\r\n    public string LastModified { get; set; }\r\n    public string Uri { get; set; }\r\n}",
+    "storageAccountName": "[replace(format('st-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')), '-', '')]",
     "storageBlobContainerName": "files",
-    "funcAppName": "[format('func-{0}', parameters('resourceNameSuffix'))]",
-    "keyVaultName": "[format('kv-{0}', parameters('resourceNameSuffix'))]",
+    "funcAppName": "[format('func-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
+    "keyVaultName": "[format('kv-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
     "keyVaultSecretStorageAccountConnectionString": "StorageConnectionString"
   },
   "resources": [
     {
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2021-12-01-preview",
-      "name": "[format('log-{0}', parameters('resourceNameSuffix'))]",
+      "name": "[format('log-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
       "location": "[parameters('resourceLocation')]",
       "properties": {
         "sku": {
@@ -66,19 +74,19 @@
     {
       "type": "Microsoft.Insights/components",
       "apiVersion": "2020-02-02",
-      "name": "[format('appi-{0}', parameters('resourceNameSuffix'))]",
+      "name": "[format('appi-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
       "location": "[parameters('resourceLocation')]",
       "kind": "web",
       "properties": {
         "Application_Type": "web",
         "RetentionInDays": 90,
-        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceNameSuffix')))]",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
         "IngestionMode": "LogAnalytics",
         "publicNetworkAccessForIngestion": "Enabled",
         "publicNetworkAccessForQuery": "Enabled"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceNameSuffix')))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
       ]
     },
     {
@@ -202,7 +210,7 @@
       "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
       "name": "LogAnalytics",
       "properties": {
-        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceNameSuffix')))]",
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
         "logs": [
           {
             "category": "AuditEvent",
@@ -218,7 +226,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('resourceNameSuffix')))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
       ]
     },
     {
@@ -236,7 +244,7 @@
     {
       "type": "Microsoft.Web/serverfarms",
       "apiVersion": "2022-03-01",
-      "name": "[format('asp-{0}', parameters('resourceNameSuffix'))]",
+      "name": "[format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
       "location": "[parameters('resourceLocation')]",
       "sku": {
         "name": "Y1",
@@ -268,7 +276,7 @@
             "hostType": "Repository"
           }
         ],
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}', parameters('resourceNameSuffix')))]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
         "siteConfig": {
           "functionAppScaleLimit": 200,
           "minimumElasticInstanceCount": 0,
@@ -282,7 +290,7 @@
         "keyVaultReferenceIdentity": "SystemAssigned"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}', parameters('resourceNameSuffix')))]"
+        "[resourceId('Microsoft.Web/serverfarms', format('asp-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
       ]
     },
     {
@@ -292,7 +300,7 @@
       "properties": {
         "AzureWebJobsStorage": "[format('@Microsoft.KeyVault(VaultName={0};SecretName={1})', variables('keyVaultName'), variables('keyVaultSecretStorageAccountConnectionString'))]",
         "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]",
-        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference(resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('resourceNameSuffix'))), '2020-02-02').ConnectionString]",
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference(resourceId('Microsoft.Insights/components', format('appi-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))), '2020-02-02').ConnectionString]",
         "FUNCTIONS_EXTENSION_VERSION": "~4",
         "FUNCTIONS_WORKER_RUNTIME": "dotnet",
         "WEBSITE_TIME_ZONE": "W. Europe Standard Time",
@@ -302,7 +310,7 @@
         "DownloadMetricName": "[parameters('downloadMetricName')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('resourceNameSuffix')))]",
+        "[resourceId('Microsoft.Insights/components', format('appi-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
         "[resourceId('Microsoft.Web/sites', variables('funcAppName'))]",
         "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), variables('keyVaultSecretStorageAccountConnectionString'))]",
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
@@ -311,22 +319,31 @@
     {
       "type": "Microsoft.Web/sites/functions",
       "apiVersion": "2022-03-01",
-      "name": "[format('{0}/{1}', variables('funcAppName'), 'GetFile')]",
-      "properties": {
-        "test_data": "{\"method\":\"get\",\"queryStringParams\":[{\"name\":\"filename\",\"value\":\"test.png\"}],\"headers\":[],\"body\":\"\"}",
-        "invoke_url_template": "[format('https://{0}.azurewebsites.net/api/files/{{filename}}', variables('funcAppName'))]",
-        "language": "CSharp",
-        "isDisabled": false
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('funcAppName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Web/sites/functions",
-      "apiVersion": "2022-03-01",
       "name": "[format('{0}/{1}', variables('funcAppName'), 'ListFiles')]",
       "properties": {
+        "config": {
+          "bindings": [
+            {
+              "name": "req",
+              "route": "files",
+              "type": "httpTrigger",
+              "direction": "in",
+              "authLevel": "anonymous",
+              "methods": [
+                "get"
+              ]
+            },
+            {
+              "name": "$return",
+              "type": "http",
+              "direction": "out"
+            }
+          ]
+        },
+        "files": {
+          "function.proj": "[variables('$fxv#0')]",
+          "run.csx": "[variables('$fxv#1')]"
+        },
         "test_data": "{\"method\":\"get\",\"queryStringParams\":[],\"headers\":[],\"body\":\"\"}",
         "invoke_url_template": "[format('https://{0}.azurewebsites.net/api/files', variables('funcAppName'))]",
         "language": "CSharp",
@@ -337,9 +354,46 @@
       ]
     },
     {
+      "type": "Microsoft.Web/sites/functions",
+      "apiVersion": "2022-03-01",
+      "name": "[format('{0}/{1}', variables('funcAppName'), 'GetFile')]",
+      "properties": {
+        "config": {
+          "bindings": [
+            {
+              "name": "req",
+              "route": "files/{filename}",
+              "type": "httpTrigger",
+              "direction": "in",
+              "authLevel": "anonymous",
+              "methods": [
+                "get"
+              ]
+            },
+            {
+              "name": "$return",
+              "type": "http",
+              "direction": "out"
+            }
+          ]
+        },
+        "files": {
+          "function.proj": "[variables('$fxv#2')]",
+          "run.csx": "[variables('$fxv#3')]"
+        },
+        "test_data": "{\"method\":\"get\",\"queryStringParams\":[{\"name\":\"filename\",\"value\":\"test.png\"}],\"headers\":[],\"body\":\"\"}",
+        "invoke_url_template": "[format('https://{0}.azurewebsites.net/api/files/{{filename}}', variables('funcAppName'))]",
+        "language": "CSharp",
+        "isDisabled": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('funcAppName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.Insights/actionGroups",
       "apiVersion": "2023-01-01",
-      "name": "[format('ag-{0}', parameters('resourceNameSuffix'))]",
+      "name": "[format('ag-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
       "location": "Global",
       "properties": {
         "groupShortName": "TechBier",
@@ -355,14 +409,14 @@
     {
       "type": "Microsoft.Insights/metricAlerts",
       "apiVersion": "2018-03-01",
-      "name": "[format('ar-{0}', parameters('resourceNameSuffix'))]",
+      "name": "[format('ar-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix'))]",
       "location": "global",
       "properties": {
         "description": "Notification when > 5 file downloads per hour",
         "severity": 3,
         "enabled": true,
         "scopes": [
-          "[resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('resourceNameSuffix')))]"
+          "[resourceId('Microsoft.Insights/components', format('appi-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
         ],
         "evaluationFrequency": "PT30M",
         "windowSize": "PT1H",
@@ -386,15 +440,25 @@
         "targetResourceRegion": "[parameters('resourceLocation')]",
         "actions": [
           {
-            "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', format('ag-{0}', parameters('resourceNameSuffix')))]",
+            "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', format('ag-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
             "webHookProperties": {}
           }
         ]
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Insights/actionGroups', format('ag-{0}', parameters('resourceNameSuffix')))]",
-        "[resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('resourceNameSuffix')))]"
+        "[resourceId('Microsoft.Insights/actionGroups', format('ag-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]",
+        "[resourceId('Microsoft.Insights/components', format('appi-{0}-{1}', parameters('resourceNameBody'), parameters('resourceNameSuffix')))]"
       ]
     }
-  ]
+  ],
+  "outputs": {
+    "userApiEndpoint": {
+      "type": "string",
+      "value": "[format('https://{0}.azurewebsites.net/api/files', variables('funcAppName'))]"
+    },
+    "operatorStorageBrowserEndpoint": {
+      "type": "string",
+      "value": "[format('{0}/#@{1}/resource{2}/storagebrowser', environment().portal, subscription().tenantId, resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')))]"
+    }
+  }
 }

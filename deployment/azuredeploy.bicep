@@ -1,4 +1,6 @@
-@description('Something like `tb-azbasics-jsc`')
+param resourceNameBody string = 'tb-azbasics'
+
+@description('Something unique like your initials or short name (e.g. "jsc")')
 param resourceNameSuffix string
 
 param resourceLocation string = resourceGroup().location
@@ -10,16 +12,16 @@ param alertReceiverEmail string = 'foo@bar.ch'
 @description('Metric name dispatched in code to indicate usage of get file function')
 param downloadMetricName string = 'Download'
 
-var storageAccountName = replace('st-${resourceNameSuffix}', '-', '')
+var storageAccountName = replace('st-${resourceNameBody}-${resourceNameSuffix}', '-', '')
 var storageBlobContainerName = 'files'
 
-var funcAppName = 'func-${resourceNameSuffix}'
+var funcAppName = 'func-${resourceNameBody}-${resourceNameSuffix}'
 
-var keyVaultName = 'kv-${resourceNameSuffix}'
+var keyVaultName = 'kv-${resourceNameBody}-${resourceNameSuffix}'
 var keyVaultSecretStorageAccountConnectionString = 'StorageConnectionString'
 
 resource logAnalyticsWsRes 'Microsoft.OperationalInsights/workspaces@2021-12-01-preview' = {
-  name: 'log-${resourceNameSuffix}'
+  name: 'log-${resourceNameBody}-${resourceNameSuffix}'
   location: resourceLocation
   properties: {
     sku: {
@@ -38,7 +40,7 @@ resource logAnalyticsWsRes 'Microsoft.OperationalInsights/workspaces@2021-12-01-
 }
 
 resource appInsightsRes 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'appi-${resourceNameSuffix}'
+  name: 'appi-${resourceNameBody}-${resourceNameSuffix}'
   location: resourceLocation
   kind: 'web'
   properties: {
@@ -184,7 +186,7 @@ resource keyVaultSecretStorageAccountConnectionStringRes 'Microsoft.KeyVault/vau
 }
 
 resource appServicePlanRes 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: 'asp-${resourceNameSuffix}'
+  name: 'asp-${resourceNameBody}-${resourceNameSuffix}'
   location: resourceLocation
   sku: {
     name: 'Y1'
@@ -250,21 +252,34 @@ resource funcAppSettingsRes 'Microsoft.Web/sites/config@2022-03-01' = {
   ]
 }
 
-resource funcGetFileRes 'Microsoft.Web/sites/functions@2022-03-01' = {
-  parent: funcAppRes
-  name: 'GetFile'
-  properties: {
-    test_data: '{"method":"get","queryStringParams":[{"name":"filename","value":"test.png"}],"headers":[],"body":""}'
-    invoke_url_template: 'https://${funcAppName}.azurewebsites.net/api/files/{filename}'
-    language: 'CSharp'
-    isDisabled: false
-  }
-}
 
 resource funcListFilesRes 'Microsoft.Web/sites/functions@2022-03-01' = {
   parent: funcAppRes
   name: 'ListFiles'
   properties: {
+    config: {
+      bindings: [
+        {
+          name: 'req'
+          route: 'files'
+          type: 'httpTrigger'
+          direction: 'in'
+          authLevel: 'anonymous'
+          methods: [
+            'get'
+          ]
+        }
+        {
+          name: '$return'
+          type: 'http'
+          direction: 'out'
+        }
+      ]
+    }
+    files: {
+      'function.proj': loadTextContent('../source/function.proj')
+      'run.csx': loadTextContent('../source/listing-advanced.run.csx')
+    }
     test_data: '{"method":"get","queryStringParams":[],"headers":[],"body":""}'
     invoke_url_template: 'https://${funcAppName}.azurewebsites.net/api/files'
     language: 'CSharp'
@@ -272,8 +287,42 @@ resource funcListFilesRes 'Microsoft.Web/sites/functions@2022-03-01' = {
   }
 }
 
+resource funcGetFileRes 'Microsoft.Web/sites/functions@2022-03-01' = {
+  parent: funcAppRes
+  name: 'GetFile'
+  properties: {
+    config: {
+      bindings: [
+        {
+          name: 'req'
+          route: 'files/{filename}'
+          type: 'httpTrigger'
+          direction: 'in'
+          authLevel: 'anonymous'
+          methods: [
+            'get'
+          ]
+        }
+        {
+          name: '$return'
+          type: 'http'
+          direction: 'out'
+        }
+      ]
+    }
+    files: {
+      'function.proj': loadTextContent('../source/function.proj')
+      'run.csx': loadTextContent('../source/detail.run.csx')
+    }
+    test_data: '{"method":"get","queryStringParams":[{"name":"filename","value":"test.png"}],"headers":[],"body":""}'
+    invoke_url_template: 'https://${funcAppName}.azurewebsites.net/api/files/{filename}'
+    language: 'CSharp'
+    isDisabled: false
+  }
+}
+
 resource actionGroupRes 'Microsoft.Insights/actionGroups@2023-01-01' = {
-  name: 'ag-${resourceNameSuffix}'
+  name: 'ag-${resourceNameBody}-${resourceNameSuffix}'
   location: 'Global'
   properties: {
     groupShortName: 'TechBier'
@@ -288,7 +337,7 @@ resource actionGroupRes 'Microsoft.Insights/actionGroups@2023-01-01' = {
 }
 
 resource alertRuleRes 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: 'ar-${resourceNameSuffix}'
+  name: 'ar-${resourceNameBody}-${resourceNameSuffix}'
   location: 'global'
   properties: {
     description: 'Notification when > 5 file downloads per hour'
@@ -326,3 +375,6 @@ resource alertRuleRes 'Microsoft.Insights/metricAlerts@2018-03-01' = {
     ]
   }
 }
+
+output userApiEndpoint string = 'https://${funcAppName}.azurewebsites.net/api/files'
+output operatorStorageBrowserEndpoint string = '${environment().portal}/#@${subscription().tenantId}/resource${storageAccountRes.id}/storagebrowser'

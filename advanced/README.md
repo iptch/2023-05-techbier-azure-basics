@@ -4,7 +4,7 @@ Dein Kunde möchte eine REST API zum Anzeigen und Downloaden von manuell bereitg
 - Die Route GET `/files` listet alle verfügbaren Dateien auf (nur Namen)
 - Die Route GET `/files/{filename}` liefert Detaileigenschaften sowie einen Download-Link der Datei
 - Der Download-Link ist jeweils nur für 5 Minuten gültig
-- Die API Requests können einfach statistisch ausgewertet werden, d.h. wieviele Anfragen in welchem Zeitraum getätigt werden
+- Die API Requests können einfach statistisch ausgewertet werden, d.h. wie viele Anfragen in welchem Zeitraum getätigt werden
 - Wenn mehr als 5 Detailabfragen pro Stunde erfolgen, erfolgt eine Benachrichtigung per Email (für Entwicklung kann diese frei gewählt werden)
 - Die Implementation erfolgt nach den Zero Trust Prinzipen, verzichtet aber im ersten Ausarbeitungsschritt auf Netzwerksicherheit und User-Authentifikation
 
@@ -42,7 +42,7 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
 
    - Consumption Plan
    - Runtime Stack je nach gewünschter Code Language: https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages#language-support-details (Hinweis: `In-Portal Editing` in referenzierter Tabelle bedeutet, dass direkt im Portal ohne weitere Tools programmiert werden kann)
-   - Für die Nutzung der bereitgestellten Code Snippets wähle: Publish = Code, Runtime Stack = .NET, Version = 6 (LTS), Operating System = (egal)
+   - Für die Nutzung der bereitgestellten Code Snippets wähle: Publish = Code, Runtime Stack = .NET, Version = 6 (LTS), Operating System = Windows
 
 1. Auf Function App die (System-assigned) Managed Identity aktivieren
 
@@ -55,7 +55,7 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
    .
 
    _Ist der Key Vault hierfür notwendig?_
-   > Nein. Eine alternative Lösung wäre, die Managed Identity der Function direkt für den Storage Account zu berechtigen. Dies ist oft schlanker und in der Realität oft die präferierte Lösung (nachteilig ist aber, dass das Deployment mit hohen Priviledges laufen muss).
+   > Nein. Eine alternative Lösung wäre, die Managed Identity der Function direkt für den Storage Account zu berechtigen. Dies ist oft schlanker und in der Realität oft die präferierte Lösung (nachteilig ist aber, dass das Deployment mit hohen Privileges laufen muss).
 
 1. Secret mit für die Connection zum Storage Account anlegen
 
@@ -107,7 +107,7 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
    - Unter `Code + Test` mittels Upload die beiden Files unter `source/list-files` hochladen:
      - [`function.proj`](./source/list-files/function.proj)
      - [`run.csx`](./source/list-files/run.csx)
-   - Hinweis: Leider klappt obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
+   - Hinweis: Leider funktioniert obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
 
 1. Function für Download Detail eines Files erstellen
 
@@ -123,19 +123,19 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
    - Unter `Code + Test` mittels Upload die beiden Files unter `source/list-files` hochladen:
      - [`function.proj`](./source/get-file/function.proj)
      - [`run.csx`](./source/get-file/run.csx)
-   - Hinweis: Leider klappt obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
+   - Hinweis: Leider funktioniert obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
 
 1. Die Functions testen um Monitoring Daten zu generieren
    
 1. Metriken in Application Insights analysieren
 
-   - Hinweis: Es kann 2-3 Minuten dauern bis die Daten im Application Insights verfügbar sind
+   - Hinweis: Es kann 2-3 Minuten dauern, bis die Daten im Application Insights verfügbar sind
    - Navigiere in der Application Insights Instanz zu `Monitoring` -> `Metrics`
    - Selektiere im Namespace `Log-based metrics` die Metric `Download` (im Bereich `Custom`) und aggregiere mittels Summe
 
 1. Alert Rule inklusive einer Action Group für Email Notifikation erstellen
 
-   - Grundsätzlich kann direkt aus obigem Bereich mittels `New alert rule` eine Benachrichtigung erstellt werden. Nur erscheint manchmal ein falscher Fehler, der sich wie folgt lösen läst:
+   - Grundsätzlich kann direkt aus obigem Bereich mittels `New alert rule` eine Benachrichtigung erstellt werden. Nur erscheint manchmal ein falscher Fehler, der sich wie folgt lösen lässt:
      - Condition / Signal name = Download
      - Condition / Treshold = Static
      - Condition / Aggregation type = Total (entspricht Sum)
@@ -147,6 +147,6 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
 
 # Direkt zur Lösung
 
-Wir empfehlen erste Schritte manuell im Azure Portal auszuführen. So wird man mit den Strukturen vertraut und bekommt Routine mit der teils gewöhnungsbedürftigen Navigation (dafür ist man beispielweise in Debugging Situationen froh). Wenn man Services manuell und step-by-step deployed, lassen sich Abhängigkeiten, Relationen und Sub-Komponenten leicht erkennen. Infrastructure as Code und Deployment Automatisierung ist gut und wichtig - aber man sollte verstehen was man dabei macht.
+Wir empfehlen erste Schritte manuell im Azure Portal auszuführen. So wird man mit den Strukturen vertraut und bekommt Routine mit der teils gewöhnungsbedürftigen Navigation (dafür ist man beispielweise in Debugging Situationen froh). Wenn man Services manuell und step-by-step deployed, lassen sich Abhängigkeiten, Relationen und Sub-Komponenten leicht erkennen. Infrastructure as Code und Deployment Automatisierung ist gut und wichtig - aber man sollte verstehen, was man dabei macht.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fiptch%2F2023-05-techbier-azure-basics%2Fmain%2Fadvanced%2Fdeployment%2Fazuredeploy.json)

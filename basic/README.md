@@ -35,7 +35,7 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
 
    - Consumption Plan
    - Runtime Stack je nach gewünschter Code Language: https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages#language-support-details (Hinweis: `In-Portal Editing` in referenzierter Tabelle bedeutet, dass direkt im Portal ohne weitere Tools programmiert werden kann)
-   - Für die Nutzung der bereitgestellten Code Snippets wähle: Publish = Code, Runtime Stack = .NET, Version = 6 (LTS), Operating System = (egal)
+   - Für die Nutzung der bereitgestellten Code Snippets wähle: Publish = Code, Runtime Stack = .NET, Version = 6 (LTS), Operating System = Windows
    - Application Insights muss nicht generiert werden
 
 1. Connection zu Storage Account in Function App konfigurieren
@@ -74,10 +74,10 @@ Diese Challenge ist nicht als komplettes Copy-Paste Tutorial konzipiert. Sie kan
    - Unter `Code + Test` mittels Upload die beiden Files unter `source/list-files` hochladen:
      - [`function.proj`](./source/list-files/function.proj)
      - [`run.csx`](./source/list-files/run.csx)
-   - Hinweis: Leider klappt obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
+   - Hinweis: Leider funktioniert obiger Schritt nicht immer vollständig. Falls die Files nach dem Upload leer sind, muss der Inhalt manuell mittels Copy & Paste reinkopiert werden.
 
 # Direkt zur Lösung
 
-Wir empfehlen erste Schritte manuell im Azure Portal auszuführen. So wird man mit den Strukturen vertraut und bekommt Routine mit der teils gewöhnungsbedürftigen Navigation (dafür ist man beispielweise in Debugging Situationen froh). Wenn man Services manuell und step-by-step deployed, lassen sich Abhängigkeiten, Relationen und Sub-Komponenten leicht erkennen. Infrastructure as Code und Deployment Automatisierung ist gut und wichtig - aber man sollte verstehen was man dabei macht.
+Wir empfehlen erste Schritte manuell im Azure Portal auszuführen. So wird man mit den Strukturen vertraut und bekommt Routine mit der teils gewöhnungsbedürftigen Navigation (dafür ist man beispielweise in Debugging Situationen froh). Wenn man Services manuell und step-by-step deployed, lassen sich Abhängigkeiten, Relationen und Sub-Komponenten leicht erkennen. Infrastructure as Code und Deployment Automatisierung ist gut und wichtig - aber man sollte verstehen, was man dabei macht.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fiptch%2F2023-05-techbier-azure-basics%2Fmain%2Fbasic%2Fdeployment%2Fazuredeploy.json)
